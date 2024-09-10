@@ -1,0 +1,305 @@
+---
+title: "2023_NRL_Analysis"
+author: "CJ"
+date: "2023-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(writexl)
+library(ggridges)
+library(extrafont)
+library(purrr)
+library(ggimage)
+library(ggthemes)
+library(tvthemes)
+```
+
+```{r import data}
+# Team end position on ladder
+nrl_ladder <- read_excel("2023_NRL_results.xlsx", sheet = "final_ladder")
+
+# Game result data
+nrl <- read_excel("2023_NRL_results.xlsx", sheet = "scores")
+
+# Create new columns for point differential for home and away teams
+nrl <- nrl %>%
+  mutate(Home_diff = Home_score - Away_score,
+         Away_diff = Away_score - Home_score)
+
+# Create long table from original dataframe to just show team and point differential
+nrl_long <- nrl %>%
+  # Create two copies of each game, one for home and one for away
+  gather(key = "Home_away", value = "Point_diff", Home_diff, Away_diff) %>%
+  mutate(Team = if_else(Home_away == "Home_diff", Home_team, Away_team)) %>%
+  select(Team, Point_diff)
+
+# Join with final ladder position dataframe, for ordering subsequent joy plot
+
+nrl_long <- nrl_long %>%
+  left_join(nrl_ladder, by = "Team") %>%
+  arrange(Position)  # Arrange by position
+
+# Define team colours
+team_colours <- c(
+  "Panthers" = "#000000",
+  "Broncos" = "#760036",
+  "Storm" = "#632390",
+  "Warriors" = "#03673F",
+  "Knights" = "#EE3524",
+  "Sharks" = "#00A9D8",
+  "Roosters" = "#00305E",
+  "Raiders" = "#C3D941",
+  "Rabbitohs" = "#08800F",
+  "Eels" = "#FFD327",
+  "Cowboys" = "#002B5C",
+  "Sea Eagles" = "#6F163D",
+  "Dolphins" = "#FF0800",
+  "Titans" = "#FBB03F",
+  "Bulldogs" = "#0054A4",
+  "Dragons" = "#FFFFFF",
+  "Tigers" = "#F68B1F"
+)
+
+image_map <- c(
+  "Panthers" = "Panthers.png",
+  "Broncos" = "Broncos.png",
+  "Storm" = "Storm.png",
+  "Warriors" = "Warriors.png",
+  "Knights" = "Knights.png",
+  "Sharks" = "Sharks.png",
+  "Roosters" = "Roosters.png",
+  "Raiders" = "Raiders.png",
+  "Rabbitohs" = "Rabbitohs.png",
+  "Eels" = "Eels.png",
+  "Cowboys" = "Cowboys.png",
+  "Sea Eagles" = "Sea_Eagles.png",
+  "Dolphins" = "Dolphins.png",
+  "Titans" = "Titans.png",
+  "Bulldogs" = "Bulldogs.png",
+  "Dragons" = "Dragons.png",
+  "Tigers" = "Tigers.png"
+)
+
+image_df <- data.frame(Team = c("Panthers", "Broncos", "Storm", "Warriors", "Knights", "Sharks", "Roosters", "Raiders", "Rabbitohs", "Eels", "Cowboys", "Sea Eagles", "Dolphins", "Titans", "Bulldogs", "Dragons", "Tigers"),
+                       Image = c("Panthers.png", "Broncos.png", "Storm.png", "Warriors.png", "Knights.png", "Sharks.png", "Roosters.png", "Raiders.png", "Rabbitohs.png", "Eels.png", "Cowboys.png", "Sea_Eagles.png", "Dolphins.png", "Titans.png", "Bulldogs.png", "Dragons.png", "Tigers.png"))
+  
+
+nrl_long <- left_join(nrl_long, image_df, by = "Team")
+
+image_data <- unique(nrl_long[c("Team", "Image")])
+
+image_data$x_position <- c(-31, 50, -33, 48, -36, 46, -38, 44, -40, 42, -42, 40, -44, 38, -46, 36, -48)
+  
+  image_data %>%
+  mutate(x_position = ifelse(row_number() %% 2 == 1, -50, 50))
+
+```
+
+joy plot of points differentials per team, ranked from top of ladder to bottom
+```{r}
+
+p <- ggplot(nrl_long, aes(x = Point_diff, y = fct_inorder(Team), fill = Team)) +
+  geom_density_ridges(alpha = 1,
+                      scale = 1.5) +
+  scale_fill_manual(values = team_colours) +
+  labs(title = "2023 NRL Point Differentials",
+       subtitle = "Distribution of each teams point differentials over the season\nTeams ordered according to end of season rankings",
+       x = "Season Point Differential Distribution",
+       y = "Team") +
+  xlim(-50, 50) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Montserrat"),
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "none",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "lightblue"),
+    plot.margin = margin(5, 10, 5, 10, "pt"),
+    axis.title.y = element_blank(),  
+    axis.text.y = element_blank(),   
+    axis.ticks.y = element_blank() 
+  ) +
+  geom_image(data = image_data, 
+             aes(x = x_position, y = fct_inorder(Team), image = Image), 
+             size = 0.1, 
+             asp = 1, 
+             inherit.aes = FALSE) +
+  expand_limits(x = c(-100, 100))
+
+print(p)
+```
+
+```{r export data}
+ggsave("nrl_point_diff.png", plot = p, width = 10, height = 6, dpi = 300)
+```
+
+```{r stadium analysis}
+
+# Input stadium database
+stadium <- read_excel("G:\\My Drive\\Project Working Documents\\Sports Analytics\\stadium_database.xlsx")
+
+# Add home team logo(s) to each stadium for later plotting
+stadium_image_df <- data.frame(Venue = c("CommBank Stadium", "BlueBet Stadium", "4 Pines Park", "Queensland Country Bank Stadium", "PointsBet Stadium", "Suncorp Stadium", "Allianz Stadium", "AAMI Park", "McDonald Jones Stadium", "Cbus Super Stadium", "GIO Stadium", "Accor Stadium", "Mount Smart Stadium", "WIN Stadium"),
+                       Image = c("Eels.png", "Panthers.png", "Sea_Eagles.png", "Cowboys.png", "Sharks.png", "Broncos.png", "Roosters.png", "Storm.png", "Knights.png", "Titans.png", "Raiders.png", "Rabbitohs.png", "Warriors.png", "Dragons.png"))
+
+stadium_joined <- stadium %>%
+  left_join(stadium_image_df, by = c("Name" = "Venue"))
+
+# Join stadium database to 2023 NRL season data to calculate stadium utilisation
+stadium_occupancy <- nrl %>%
+  left_join(stadium_joined, by = c("Venue" = "Name")) %>%
+  mutate(Utilisation = Attendance/Capacity * 100)
+
+grouped_stadium_occupancy <- stadium_occupancy %>%
+  group_by(Venue, Image) %>%
+  summarise(average_utilisation = mean(Utilisation, na.rm = TRUE)) %>%
+  arrange(average_utilisation)
+
+```
+
+```{r bar plot}
+# Bar plot of average stadium utilisation across season, sorted low to high
+ggplot(grouped_stadium_occupancy, aes(x = reorder(Venue, average_utilisation), y = average_utilisation)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Stadium", y = "Average Utilisation (%)", title = "Average Stadium Utilisation per Game Over a Season")
+```
+
+```{r boxplot}
+# Box plot of stadium utilisation distribution across the season, sorted low to high
+ggplot(stadium_occupancy, aes(x = reorder(Venue, Utilisation, FUN = median), y = Utilisation)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Stadium", y = "Utilisation (%)", title = "Stadium Utilisation Distribution Over a Season")
+```
+
+```{r boxplot filtered}
+# Box plot of stadium utilisation distribution across the season, sorted low to high
+stadium_occupancy_filtered <- stadium_occupancy %>%
+  group_by(Venue) %>%
+  filter(n() > 5)
+
+stadium_summary <- stadium_occupancy_filtered %>%
+  group_by(Venue) %>%
+  summarize(median_utilisation = median(Utilisation)) %>%
+  left_join(stadium_occupancy_filtered[, c("Venue", "Image")], by = "Venue") %>%
+  distinct(Venue, .keep_all = TRUE)
+
+stadium_utilisation_plot <- ggplot(stadium_occupancy_filtered, aes(x = reorder(Venue, Utilisation, FUN = median), y = Utilisation)) +
+  geom_boxplot() +
+  ylim(0, 100) +
+  geom_image(data = stadium_summary, aes(x = Venue, y = median_utilisation, image = Image), 
+             size = 0.1) +
+  theme() +
+  theme(
+    text = element_text(family = "Montserrat"),
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 8),
+    # panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "lightblue"),
+    axis.title.x = element_blank(),  
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(y = "Utilisation (%)", title = "2023 NRL Season - Stadium Utilisation")
+
+stadium_utilisation_plot
+
+```
+
+```{r export data}
+ggsave("stadium_utilisation.png", plot = stadium_utilisation_plot, width = 10, height = 6, dpi = 300)
+```
+
+```{r geom heatmap}
+library(ggmap)
+register_stadiamaps(key = "c753d757-22ac-44a8-ad6b-2627a03f72c9")
+
+
+center_lat <- mean(stadium_occupancy$Latitude)
+center_lon <- mean(stadium_occupancy$Longitude)
+
+base_map <- get_stadiamap(bbox = c(left = min(stadium_occupancy$Longitude), 
+                                   bottom = min(stadium_occupancy$Latitude), 
+                                   right = max(stadium_occupancy$Longitude), 
+                                   top = max(stadium_occupancy$Latitude)), 
+                          zoom = 1, maptype = "stamen_toner_lite")
+
+ggmap(base_map) +
+  geom_point(data = stadium_occupancy, aes(x = Longitude, y = Latitude, color = Utilisation), size = 5, alpha = 0.7) +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(x = "Longitude", y = "Latitude", color = "Utilisation", 
+       title = "Heatmap of Stadium Utilisation") +
+  theme_minimal()
+```
+
+```{r alternative stadiums}
+# Calculate games played by home team at each stadium and mean utilisation
+number_stadiums_played <- stadium_occupancy %>%
+  filter(Round != 10) %>% # remove Round 10 Magic Round so results not skewed
+  group_by(Home_team, Venue) %>%
+  summarise(number_played = n(),
+            mean_utilisation = mean(Utilisation))
+
+number_stadiums_played
+
+ggplot(number_stadiums_played, aes(x = number_played, y = mean_utilisation)) +
+  geom_point() +
+  scale_x_continuous(breaks = 1:max(number_stadiums_played$number_played))
+
+ggplot(number_stadiums_played, aes(x = as.factor(number_played), y = mean_utilisation)) +
+  geom_boxplot()
+
+# Aggregate utilisation across all stadiums based on number of games played there
+number_stadiums_played_agg <- number_stadiums_played %>%
+  group_by(number_played) %>%
+  summarise(mean_utilisation = mean(mean_utilisation)) 
+
+ggplot(number_stadiums_played_agg, aes(x = number_played, y = mean_utilisation)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE) # liner trendline with no error bars
+
+ggplot(number_stadiums_played_agg, aes(x = number_played, y = mean_utilisation)) +
+  geom_line() +
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2)) + # quadratic trend line with error bars
+  scale_x_continuous(breaks = 1:max(number_stadiums_played$number_played)) +
+  labs(x = "Homes Games Played at Stadium Across Season",
+       y = "Average Stadium Utilisation (%)") +
+  ylim(0, 100) +
+  theme_minimal()
+
+# Summarise this to the total number of stadiums a team has played at as the home team
+total_number_stadium_used <- number_stadiums_played %>%
+  summarise(number_stadiums = n_distinct(Venue)) %>%
+  arrange(number_stadiums)
+
+total_number_stadium_used
+
+
+
+```
+
+```{r tigers example}
+# Tigers have played at the most stadiums as a home team, specifically analyse the stadium utilisation for this team
+tigers_stadium_occupancy <- stadium_occupancy %>%
+  filter(Home_team == "Tigers")
+
+tigers_stadium_occupancy_summary <- tigers_stadium_occupancy %>%
+  group_by(Venue) %>%
+  summarise(number_played = n(),
+            mean_utilisation = mean(Utilisation)
+            )
+  
+
+ggplot(tigers_stadium_occupancy_summary, aes(x = number_played, y = mean_utilisation)) +
+  geom_point()
+```
